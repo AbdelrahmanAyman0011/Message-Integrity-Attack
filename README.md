@@ -1,22 +1,20 @@
-## Steps
+# Length Extension Attack Demo (MAC Forgery)
 
-1. Run `server.py` to get original MAC and message.
-2. Run `client.py` to forge a new message and MAC.
-3. Use `verify()` in `server.py` to test the forged MAC.
-4. Run `secure_server.py` to see the attack fail with HMAC.
-   '''
+This project demonstrates a length extension attack on insecure MAC implementations using MD5, and shows how switching to HMAC mitigates the attack.
 
-# Save files
+---
 
-files_to_create = {
-"server.py": server_code,
-"client.py": client_code,
-"secure_server.py": secure_server_code,
-"README.md": readme_content
-}
+## Project Files
 
-for filename, content in files_to_create.items():
-with open(os.path.join(base_dir, filename), "w") as f:
-f.write(content)
+- `server.py`: Simulates an insecure MAC using `MD5(secret || message)`
+- `client.py`: Performs a length extension attack on the MAC
+- `secure_server.py`: Simulates a secure server using `HMAC(secret, message)` with SHA256
+- `README.md`: Instructions to run the project
 
-base_dir # Return the base directory path
+---
+
+## Steps to Run
+
+### 1. Run the insecure server to get original MAC:
+```bash
+python server.py

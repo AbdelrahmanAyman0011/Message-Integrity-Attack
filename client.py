@@ -1,66 +1,55 @@
+# client.py (Length-Extension Attack Simulation with Base64)
 import hashlib
 import struct
-import binascii
-from server import verify as insecure_verify
-from secure_server import verify as secure_verify
+import subprocess
+import sys
+import base64
 
-# Simulate the original server's MAC generation (insecure)
-SECRET_KEY = b'supersecretkey'  # Normally unknown to attacker
-original_message = b"amount=100&to=alice"
-original_mac = hashlib.md5(SECRET_KEY + original_message).hexdigest()
-
-def md5_padding(message_length):
-    """Calculate MD5 padding for a given message length."""
+def md5_padding(message_length_bytes):
+    """Return the MD5 padding for a message of given byte-length."""
+    bit_len = message_length_bytes * 8
     padding = b'\x80'
-    padding_len = 56 - (message_length % 64)
-    if padding_len <= 0:
-        padding_len += 64
-    padding += b'\x00' * (padding_len - 1)
-    padding += struct.pack('<Q', message_length * 8)
+    padding += b'\x00' * ((56 - (message_length_bytes + 1) % 64) % 64)
+    padding += struct.pack('<Q', bit_len)
     return padding
 
-def perform_attack():
-    data_to_append = b"&admin=true"
-    
-    print("=== Length Extension Attack Demo ===")
-    print(f"Original message: {original_message}")
-    print(f"Original MAC (MD5): {original_mac}")
-    print(f"Data to append: {data_to_append}\n")
+# --- Main ---
+original_message = b"amount=100&to=alice"
+data_to_append   = b"&admin=true"
+key_length_guess = 14  # Attacker's guess
 
-    # Try with known key length (14) for demo purposes
-    key_length = len(SECRET_KEY)
-    print(f"Attempting with key length: {key_length}")
+out = subprocess.check_output([
+    sys.executable, 'server.py',
+    '--message', base64.b64encode(original_message).decode('ascii')
+]).decode().splitlines()
+original_mac = out[1].split()[-1]
 
-    # Calculate padding and forge message
-    padded_length = key_length + len(original_message)
-    padding = md5_padding(padded_length)
-    forged_message = original_message + padding + data_to_append
+print("=== Length Extension Attack Simulation ===")
+print(f"Original message: {original_message}")
+print(f"Original MAC:     {original_mac}")
+print(f"Data to append:   {data_to_append}")
+print(f"Assumed key len:  {key_length_guess}\n")
 
-    # Generate forged MAC (simulates attacker's prediction)
-    h = hashlib.md5()
-    h.update(SECRET_KEY + original_message + padding + data_to_append)
-    forged_mac = h.hexdigest()
+pad = md5_padding(key_length_guess + len(original_message))
+forged_message = original_message + pad + data_to_append
 
-    print(f"\nForged message (hex): {binascii.hexlify(forged_message)}")
-    print(f"Forged message: {forged_message}")
-    print(f"Forged MAC: {forged_mac}")
+full = SECRET_KEY = b'supersecretkey' + forged_message
+forged_mac = hashlib.md5(full).hexdigest()
 
-    # Test against both servers
-    print("\n=== Verification Results ===")
-    
-    # 1. Test against INSECURE server
-    print("\n[Insecure Server (MD5)]")
-    if insecure_verify(forged_message, forged_mac):
-        print("✅ SUCCESS! Insecure server accepted the forgery (VULNERABLE)")
-    else:
-        print("❌ FAILED: Insecure server rejected the forgery")
+print(f"Forged message: {forged_message}")
+print(f"Forged MAC:     {forged_mac}\n")
 
-    # 2. Test against SECURE HMAC server
-    print("\n[Secure Server (HMAC-SHA256)]")
-    if secure_verify(forged_message, forged_mac):
-        print("❌ CRITICAL ERROR: Secure server accepted the forgery")
-    else:
-        print("✅ SECURE: HMAC server correctly rejected the forgery")
+b64_forged = base64.b64encode(forged_message).decode('ascii')
+print("--- Insecure Server Verification ---")
+print(subprocess.check_output([
+    sys.executable, 'server.py',
+    '--message', b64_forged,
+    '--mac', forged_mac
+]).decode())
 
-if __name__ == "__main__":
-    perform_attack()
+print("--- Secure Server Verification ---")
+print(subprocess.check_output([
+    sys.executable, 'secureserver.py',
+    '--message', b64_forged,
+    '--mac', forged_mac
+]).decode())
