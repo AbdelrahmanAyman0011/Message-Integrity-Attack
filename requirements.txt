@@ -1,1 +1,2 @@
 pymd5
+hashpumpy>=1.3.0
